@@ -1,0 +1,166 @@
+service: ts-database
+
+provider:
+  name: aws
+  runtime: python2.7
+
+  region: eu-west-1
+
+functions:
+  hello:
+    handler: handler.hello
+
+resources:
+  Resources:
+    TimeSeriesVPC:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: 10.0.0.0/16
+        EnableDnsSupport: true
+        EnableDnsHostnames: true
+        Tags:
+          - Key: Name
+            Value: TimeSeries VPC
+
+    TimeSeriesInternetGateway:
+      Type: AWS::EC2::InternetGateway
+      Properties:
+        Tags:
+          - Key: Name
+            Value: TimeSeriesGateway
+
+    TimeSeriesGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId:
+          Ref: TimeSeriesVPC
+        InternetGatewayId:
+          Ref: TimeSeriesInternetGateway
+
+    TimeSeriesRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId:
+          Ref: TimeSeriesVPC
+        Tags:
+          - Key: Name
+            Value: TimeSeries Routes
+
+    TimeSeriesPublicRoute:
+      Type: AWS::EC2::Route
+      Properties:
+        RouteTableId:
+          Ref: TimeSeriesRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        GatewayId:
+          Ref: TimeSeriesInternetGateway
+
+    TimeSeriesSubnetA:
+      Type: AWS::EC2::Subnet
+      Properties:
+        AvailabilityZone: eu-west-1a
+        CidrBlock: 10.0.0.0/24
+        VpcId:
+          Ref: TimeSeriesVPC
+        Tags:
+          - Key: Name
+            Value: TimeSeries Subnet A
+
+
+    TimeSeriesSubnetB:
+      Type: AWS::EC2::Subnet
+      Properties:
+        AvailabilityZone: eu-west-1b
+        CidrBlock: 10.0.1.0/24
+        VpcId:
+          Ref: TimeSeriesVPC
+        Tags:
+          - Key: Name
+            Value: TimeSeries Subnet B
+
+    TimeSeriesSubnetARoute:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId:
+          Ref: TimeSeriesRouteTable
+        SubnetId:
+          Ref: TimeSeriesSubnetA
+
+    TimeSeriesSubnetBRoute:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        RouteTableId:
+          Ref: TimeSeriesRouteTable
+        SubnetId:
+          Ref: TimeSeriesSubnetB
+
+    InstanceSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Time Series Security Group
+        VpcId:
+          Ref: TimeSeriesVPC
+        SecurityGroupIngress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+        SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+        Tags:
+          - Key: Name
+            Value: TimeSeries SG
+
+    RDSSubnetGroup:
+      Type: AWS::RDS::DBSubnetGroup
+      Properties:
+        DBSubnetGroupDescription: TimeSeries DB Subnet Group
+        SubnetIds:
+          - Ref: TimeSeriesSubnetA
+          - Ref: TimeSeriesSubnetB
+        Tags:
+          - Key: Name
+            Value: TimeSeries RDS Subnet
+
+    RDSCluster:
+      Type: AWS::RDS::DBCluster
+      Properties:
+        MasterUsername: admin
+        MasterUserPassword: password
+        Engine: aurora
+        DBSubnetGroupName:
+          Ref: RDSSubnetGroup
+        Tags:
+          - Key: Name
+            Value: TimeSeries RDS Cluster
+
+    RDSDBInstance1:
+      Type: AWS::RDS::DBInstance
+      Properties:
+        Engine: aurora
+        DBClusterIdentifier:
+          Ref: RDSCluster
+        PubliclyAccessible: true
+        AvailabilityZone:
+          Fn::GetAtt:
+          - TimeSeriesSubnetA
+          - AvailabilityZone
+        DBInstanceClass: db.t2.medium
+        Tags:
+          - Key: Name
+            Value: TimeSeries RDS 1
+
+    RDSDBInstance2:
+      Type: AWS::RDS::DBInstance
+      Properties:
+        Engine: aurora
+        DBClusterIdentifier:
+          Ref: RDSCluster
+        PubliclyAccessible: true
+        AvailabilityZone:
+          Fn::GetAtt:
+          - TimeSeriesSubnetB
+          - AvailabilityZone
+        DBInstanceClass: db.t2.medium
+        Tags:
+          - Key: Name
+            Value: TimeSeries RDS 1
